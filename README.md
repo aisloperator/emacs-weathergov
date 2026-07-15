@@ -48,6 +48,10 @@ Put `weathergov.el` somewhere on your `load-path` and:
   last time this command fetched data in the current Emacs session,
   and is omitted the first time.
 
+  TODO: the human says this pressure trend approach (comparing
+  against the last fetch in the session, since the DWML feed itself
+  only gives a single reading) might not be the best way to do this.
+
 All three commands take a prefix argument (`C-u`) to prompt for a URL
 to fetch instead of using `weathergov-data-url`.
 
