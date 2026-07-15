@@ -458,6 +458,7 @@ next forecast high and low."
          (apparent (weathergov--find-parameter cur-params 'temperature "apparent"))
          (main-temp (or actual apparent))
          (chunks nil))
+    (push "weather.gov" chunks)
     (when main-temp
       (push (weathergov--format-value-compact main-temp) chunks))
     (when (and actual apparent
@@ -505,14 +506,15 @@ next forecast high and low."
 (defun weathergov-insert-current-dense (&optional url)
   "Fetch weather.gov data and insert a compact one-line summary at point.
 
-The line reports current temperature (and \"feels like\" temperature,
-if distinct), the next forecast high and low, humidity, barometric
-pressure, wind, dew point, general sky conditions, and any active
-hazard headlines, all as compact plain ASCII text with no location
-name -- meant for logging into notes.  For example:
+The line is prefixed with \"weather.gov\", followed by the current
+temperature (and \"feels like\" temperature, if distinct), the next
+forecast high and low, humidity, barometric pressure, wind, dew
+point, general sky conditions, and any active hazard headlines, all
+as compact plain ASCII text with no location name -- meant for
+logging into notes.  For example:
 
-    79F feels 83F high 82F low 67F humidity 50% pressure (down)30.01in
-    air-quality-alert
+    weather.gov 79F feels 83F high 82F low 67F humidity 50% pressure
+    (down)30.01in air-quality-alert
 
 The pressure trend (\"(up)\", \"(down)\", or \"(steady)\") is relative
 to the last time this command fetched data in the current Emacs

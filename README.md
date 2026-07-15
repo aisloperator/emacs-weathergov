@@ -41,7 +41,7 @@ Put `weathergov.el` somewhere on your `load-path` and:
   logging into notes, e.g.:
 
   ```
-  79F feels 83F high 82F low 67F humidity 50% pressure (down)30.01in air-quality-alert
+  weather.gov 79F feels 83F high 82F low 67F humidity 50% pressure (down)30.01in air-quality-alert
   ```
 
   The pressure trend (`(up)`, `(down)`, `(steady)`) is relative to the
