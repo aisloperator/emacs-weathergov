@@ -36,8 +36,20 @@ Put `weathergov.el` somewhere on your `load-path` and:
   report of current conditions and the text forecast, with faces for
   readability, in a buffer, `*weathergov-show*`.
 
-Both commands take a prefix argument (`C-u`) to prompt for a URL to
-fetch instead of using `weathergov-data-url`.
+- `M-x weathergov-insert-current-dense` — fetch the data and insert a
+  compact one-line ASCII summary of current conditions at point, for
+  logging into notes, e.g.:
+
+  ```
+  79F feels 83F high 82F low 67F humidity 50% pressure (down)30.01in air-quality-alert
+  ```
+
+  The pressure trend (`(up)`, `(down)`, `(steady)`) is relative to the
+  last time this command fetched data in the current Emacs session,
+  and is omitted the first time.
+
+All three commands take a prefix argument (`C-u`) to prompt for a URL
+to fetch instead of using `weathergov-data-url`.
 
 ## Functions
 

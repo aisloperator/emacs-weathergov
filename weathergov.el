@@ -39,6 +39,10 @@
 ;;     Fetch the data and show a human-readable report of current
 ;;     conditions and the text forecast, in a buffer,
 ;;     `*weathergov-show*'.
+;;
+;;   M-x weathergov-insert-current-dense
+;;     Fetch the data and insert a compact one-line ASCII summary of
+;;     current conditions at point, for logging into notes.
 
 ;;; Code:
 
@@ -392,6 +396,141 @@ With a prefix argument, prompt for URL to fetch instead of using
         (goto-char (point-min)))
       (view-mode 1))
     (pop-to-buffer buffer)))
+
+(defvar weathergov--last-pressure-value nil
+  "The most recently seen barometric pressure, as a number.
+Used by `weathergov--pressure-trend' to report a rise/fall trend from
+one call of `weathergov-insert-current-dense' to the next within the
+same Emacs session.  There is no trend history before the first
+call, so nil here means \"unknown\".")
+
+(defun weathergov--pressure-trend (current)
+  "Compare CURRENT barometric pressure against the last-seen value.
+Return \"up\", \"down\", \"steady\", or nil if there is no previous
+value to compare against.  Also update the stored last-seen value to
+CURRENT, as a side effect."
+  (prog1
+      (when weathergov--last-pressure-value
+        (cond ((> current weathergov--last-pressure-value) "up")
+              ((< current weathergov--last-pressure-value) "down")
+              (t "steady")))
+    (setq weathergov--last-pressure-value current)))
+
+(defun weathergov--compact-unit-suffix (units)
+  "Return a short, plain-ASCII display suffix for weather.gov UNITS, or nil."
+  (when units
+    (pcase units
+      ("Fahrenheit" "F")
+      ("Celsius" "C")
+      ("knots" "kt")
+      ("percent" "%")
+      ("inches of mercury" "in")
+      (_ units))))
+
+(defun weathergov--format-value-compact (node &optional default-suffix)
+  "Return NODE's first <value> glued tightly to its units, e.g. \"30.01in\".
+If NODE has no `units' attribute, DEFAULT-SUFFIX is used instead (and
+may be nil for no suffix at all)."
+  (let ((v (car (weathergov--values node))))
+    (and v (concat v (or (weathergov--compact-unit-suffix (weathergov--attr node 'units))
+                          default-suffix
+                          "")))))
+
+(defun weathergov--find-temperature-untyped (parameters)
+  "Return a <temperature> child of PARAMETERS that has no `type' attribute.
+Such an element, when present, is the actual (non-apparent) reading,
+as opposed to types like \"apparent\" or \"dew point\"."
+  (seq-find (lambda (n) (not (weathergov--attr n 'type)))
+            (xml-get-children parameters 'temperature)))
+
+(defun weathergov--hyphenate (text)
+  "Return TEXT downcased with spaces replaced by hyphens.
+E.g. \"Air Quality Alert\" becomes \"air-quality-alert\"."
+  (downcase (replace-regexp-in-string " " "-" text)))
+
+(defun weathergov--dense-current-line (current forecast)
+  "Return a compact, single-line ASCII summary of current conditions.
+CURRENT is a <data type=\"current observations\"> element.  FORECAST,
+if non-nil, is a <data type=\"forecast\"> element, used to add the
+next forecast high and low."
+  (let* ((cur-params (car (xml-get-children current 'parameters)))
+         (actual (weathergov--find-temperature-untyped cur-params))
+         (apparent (weathergov--find-parameter cur-params 'temperature "apparent"))
+         (main-temp (or actual apparent))
+         (chunks nil))
+    (when main-temp
+      (push (weathergov--format-value-compact main-temp) chunks))
+    (when (and actual apparent
+               (not (equal (car (weathergov--values actual))
+                           (car (weathergov--values apparent)))))
+      (push (concat "feels " (weathergov--format-value-compact apparent)) chunks))
+    (when forecast
+      (let* ((f-params (car (xml-get-children forecast 'parameters)))
+             (high (weathergov--find-parameter f-params 'temperature "maximum"))
+             (low (weathergov--find-parameter f-params 'temperature "minimum")))
+        (when high (push (concat "high " (weathergov--format-value-compact high)) chunks))
+        (when low (push (concat "low " (weathergov--format-value-compact low)) chunks))))
+    (let ((humidity (weathergov--find-parameter cur-params 'humidity "relative")))
+      (when humidity
+        (push (concat "humidity " (weathergov--format-value-compact humidity "%")) chunks)))
+    (let* ((pressure (weathergov--find-parameter cur-params 'pressure "barometer"))
+           (pv (and pressure (car (weathergov--values pressure)))))
+      (when pv
+        (let ((trend (weathergov--pressure-trend (string-to-number pv))))
+          (push (concat "pressure " (if trend (format "(%s)" trend) "")
+                        (weathergov--format-value-compact pressure))
+                chunks))))
+    (let* ((wind-dir (weathergov--find-parameter cur-params 'direction "wind"))
+           (wind-speed (weathergov--find-parameter cur-params 'wind-speed "sustained")))
+      (when wind-speed
+        (push (concat "wind "
+                      (or (weathergov--compass-direction (car (weathergov--values wind-dir))) "")
+                      (weathergov--format-value-compact wind-speed))
+              chunks)))
+    (let ((dewpoint (weathergov--find-parameter cur-params 'temperature "dew point")))
+      (when dewpoint
+        (push (concat "dewpoint " (weathergov--format-value-compact dewpoint)) chunks)))
+    (let* ((weather (weathergov--find-parameter cur-params 'weather))
+           (summary (and weather (seq-find #'identity (weathergov--weather-summaries weather)))))
+      (when summary
+        (push (weathergov--hyphenate summary) chunks)))
+    (when forecast
+      (let* ((f-params (car (xml-get-children forecast 'parameters)))
+             (headlines (delq nil (weathergov--hazard-headlines f-params))))
+        (dolist (headline headlines)
+          (push (weathergov--hyphenate headline) chunks))))
+    (mapconcat #'identity (nreverse chunks) " ")))
+
+;;;###autoload
+(defun weathergov-insert-current-dense (&optional url)
+  "Fetch weather.gov data and insert a compact one-line summary at point.
+
+The line reports current temperature (and \"feels like\" temperature,
+if distinct), the next forecast high and low, humidity, barometric
+pressure, wind, dew point, general sky conditions, and any active
+hazard headlines, all as compact plain ASCII text with no location
+name -- meant for logging into notes.  For example:
+
+    79F feels 83F high 82F low 67F humidity 50% pressure (down)30.01in
+    air-quality-alert
+
+The pressure trend (\"(up)\", \"(down)\", or \"(steady)\") is relative
+to the last time this command fetched data in the current Emacs
+session; it is omitted the first time, since there is nothing yet to
+compare against.
+
+With a prefix argument, prompt for URL to fetch instead of using
+`weathergov-data-url'."
+  (interactive
+   (list (when current-prefix-arg
+           (read-string "Weather data URL: " weathergov-data-url))))
+  (let* ((data (weathergov-fetch-data url))
+         (dwml (car data))
+         (current (weathergov--data-section dwml "current observations"))
+         (forecast (weathergov--data-section dwml "forecast")))
+    (unless current
+      (error "weathergov: no current-observations data in response"))
+    (insert (weathergov--dense-current-line current forecast))))
 
 ;;;###autoload
 (defun weathergov-raw (&optional url)
