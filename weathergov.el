@@ -444,9 +444,14 @@ as opposed to types like \"apparent\" or \"dew point\"."
             (xml-get-children parameters 'temperature)))
 
 (defun weathergov--hyphenate (text)
-  "Return TEXT downcased with spaces replaced by hyphens.
-E.g. \"Air Quality Alert\" becomes \"air-quality-alert\"."
-  (downcase (replace-regexp-in-string " " "-" text)))
+  "Return TEXT downcased with runs of whitespace replaced by hyphens.
+E.g. \"Air Quality Alert\" becomes \"air-quality-alert\".  Leading and
+trailing whitespace is discarded rather than turned into a hyphen;
+weather.gov's `weather-summary' values are sometimes padded with a
+leading space, since they are meant to be concatenated after a
+coverage word (e.g. \"Chance\" + \" Thunderstorm\") when one is
+present."
+  (downcase (replace-regexp-in-string "[ \t\n\r]+" "-" (string-trim text))))
 
 (defun weathergov--dense-current-line (current forecast)
   "Return a compact, single-line ASCII summary of current conditions.
