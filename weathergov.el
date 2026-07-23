@@ -408,25 +408,6 @@ a command; call it from Lisp."
       (view-mode 1))
     (pop-to-buffer buffer)))
 
-(defvar weathergov--last-pressure-value nil
-  "The most recently seen barometric pressure, as a number.
-Used by `weathergov--pressure-trend' to report a rise/fall trend from
-one call of `weathergov-insert' to the next within the
-same Emacs session.  There is no trend history before the first
-call, so nil here means \"unknown\".")
-
-(defun weathergov--pressure-trend (current)
-  "Compare CURRENT barometric pressure against the last-seen value.
-Return \"up\", \"down\", \"steady\", or nil if there is no previous
-value to compare against.  Also update the stored last-seen value to
-CURRENT, as a side effect."
-  (prog1
-      (when weathergov--last-pressure-value
-        (cond ((> current weathergov--last-pressure-value) "up")
-              ((< current weathergov--last-pressure-value) "down")
-              (t "steady")))
-    (setq weathergov--last-pressure-value current)))
-
 (defun weathergov--compact-unit-suffix (units)
   "Return a short, plain-ASCII display suffix for weather.gov UNITS, or nil."
   (when units
@@ -481,41 +462,39 @@ next forecast high and low."
       (push main-str chunks))
     (when (and actual-str apparent-str (not (equal actual-str apparent-str)))
       (push (concat "feels " apparent-str) chunks))
+    (let* ((humidity (weathergov--find-parameter cur-params 'humidity "relative"))
+           (humidity-str (and humidity (weathergov--format-value-compact humidity "%"))))
+      (when humidity-str
+        (push humidity-str chunks)))
+    (let* ((weather (weathergov--find-parameter cur-params 'weather))
+           (summary (and weather (seq-find #'identity (weathergov--weather-summaries weather)))))
+      (when summary
+        (push (weathergov--hyphenate summary) chunks)))
     (when forecast
       (let* ((f-params (car (xml-get-children forecast 'parameters)))
              (high (weathergov--find-parameter f-params 'temperature "maximum"))
              (low (weathergov--find-parameter f-params 'temperature "minimum"))
              (high-str (and high (weathergov--format-value-compact high)))
-             (low-str (and low (weathergov--format-value-compact low))))
-        (when high-str (push (concat "high " high-str) chunks))
-        (when low-str (push (concat "low " low-str) chunks))))
-    (let* ((humidity (weathergov--find-parameter cur-params 'humidity "relative"))
-           (humidity-str (and humidity (weathergov--format-value-compact humidity "%"))))
-      (when humidity-str
-        (push (concat "humidity " humidity-str) chunks)))
+             (low-str (and low (weathergov--format-value-compact low)))
+             (parts (delq nil (list (and high-str (concat "high " high-str))
+                                     (and low-str (concat "low " low-str))))))
+        (when parts
+          (push (concat "(" (mapconcat #'identity parts " ") ")") chunks))))
     (let* ((pressure (weathergov--find-parameter cur-params 'pressure "barometer"))
-           (pv (and pressure (car (weathergov--values pressure)))))
-      (when pv
-        (let ((trend (weathergov--pressure-trend (string-to-number pv))))
-          (push (concat "pressure " (if trend (format "(%s)" trend) "")
-                        (weathergov--format-value-compact pressure))
-                chunks))))
+           (pressure-str (and pressure (weathergov--format-value-compact pressure))))
+      (when pressure-str
+        (push (concat "pressure " pressure-str) chunks)))
     (let* ((wind-dir (weathergov--find-parameter cur-params 'direction "wind"))
            (wind-speed (weathergov--find-parameter cur-params 'wind-speed "sustained"))
+           (dir (and wind-dir (weathergov--compass-direction (car (weathergov--values wind-dir)))))
            (speed-str (and wind-speed (weathergov--format-value-compact wind-speed))))
       (when speed-str
-        (push (concat "wind "
-                      (or (weathergov--compass-direction (car (weathergov--values wind-dir))) "")
-                      speed-str)
+        (push (concat "wind " (if dir (format "(%s)" (downcase dir)) "") speed-str)
               chunks)))
     (let* ((dewpoint (weathergov--find-parameter cur-params 'temperature "dew point"))
            (dewpoint-str (and dewpoint (weathergov--format-value-compact dewpoint))))
       (when dewpoint-str
         (push (concat "dewpoint " dewpoint-str) chunks)))
-    (let* ((weather (weathergov--find-parameter cur-params 'weather))
-           (summary (and weather (seq-find #'identity (weathergov--weather-summaries weather)))))
-      (when summary
-        (push (weathergov--hyphenate summary) chunks)))
     (when forecast
       (let* ((f-params (car (xml-get-children forecast 'parameters)))
              (headlines (delq nil (weathergov--hazard-headlines f-params))))
@@ -528,19 +507,15 @@ next forecast high and low."
   "Fetch weather.gov data and insert a compact one-line summary at point.
 
 The line is prefixed with \"Weather.gov\", followed by the current
-temperature (and \"feels like\" temperature, if distinct), the next
-forecast high and low, humidity, barometric pressure, wind, dew
-point, general sky conditions, and any active hazard headlines, all
-as compact plain ASCII text with no location name -- meant for
-logging into notes.  For example:
+temperature (and \"feels like\" temperature, if distinct), humidity,
+general sky conditions, the next forecast high and low (in
+parentheses), barometric pressure, wind (direction in parentheses,
+lowercase), dew point, and any active hazard headlines, all as
+compact plain ASCII text with no location name -- meant for logging
+into notes.  For example:
 
-    Weather.gov 79F feels 83F high 82F low 67F humidity 50% pressure
-    (down)30.01in air-quality-alert
-
-The pressure trend (\"(up)\", \"(down)\", or \"(steady)\") is relative
-to the last time this command fetched data in the current Emacs
-session; it is omitted the first time, since there is nothing yet to
-compare against.
+    Weather.gov 75F 36% a-few-clouds (high 81F low 61F) pressure
+    30.09in wind (nnw)8kt dewpoint 46F
 
 With a prefix argument, prompt for URL to fetch instead of using
 `weathergov-data-url'."

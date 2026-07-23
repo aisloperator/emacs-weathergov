@@ -34,16 +34,8 @@ Put `weathergov.el` somewhere on your `load-path` and:
   into notes, e.g.:
 
   ```
-  Weather.gov 79F feels 83F high 82F low 67F humidity 50% pressure (down)30.01in air-quality-alert
+  Weather.gov 75F 36% a-few-clouds (high 81F low 61F) pressure 30.09in wind (nnw)8kt dewpoint 46F
   ```
-
-  The pressure trend (`(up)`, `(down)`, `(steady)`) is relative to the
-  last time this command fetched data in the current Emacs session,
-  and is omitted the first time.
-
-  TODO: the human says this pressure trend approach (comparing
-  against the last fetch in the session, since the DWML feed itself
-  only gives a single reading) might not be the best way to do this.
 
   With a prefix argument (`C-u`), prompts for a URL to fetch instead
   of using `weathergov-data-url`.
