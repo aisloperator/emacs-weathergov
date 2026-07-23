@@ -147,8 +147,13 @@ so that other functions can pick out of it whatever they need."
   "16-point compass direction names, indexed by 22.5-degree sector.")
 
 (defun weathergov--attr (node attr)
-  "Return the value of attribute ATTR (a symbol) on NODE, or nil."
-  (cdr (assq attr (xml-node-attributes node))))
+  "Return the value of attribute ATTR (a symbol) on NODE, or nil.
+The value is whitespace-trimmed: unlike element text, `xml.el' does
+not trim attribute values, and weather.gov attributes such as
+`weather-summary' and hazard `headline' are sometimes padded with a
+leading space (meant for concatenation after a coverage word)."
+  (let ((v (cdr (assq attr (xml-node-attributes node)))))
+    (if (stringp v) (string-trim v) v)))
 
 (defun weathergov--text (node)
   "Return the trimmed text content of NODE, or nil if empty.
