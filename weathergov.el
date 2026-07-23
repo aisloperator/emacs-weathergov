@@ -29,20 +29,24 @@
 ;; do something specific with the data (summarize it, show a
 ;; forecast, etc.) are built on top of it.
 ;;
-;; Commands:
+;; Command:
 ;;
-;;   M-x weathergov-raw
+;;   M-x weathergov-insert
+;;     Fetch the data and insert a compact one-line ASCII summary of
+;;     current conditions at point, for logging into notes.
+;;
+;; `weathergov-show' and `weathergov-raw' are plain (non-interactive)
+;; functions rather than commands, to keep the M-x namespace
+;; uncluttered; call them from Lisp:
+;;
+;;   (weathergov-raw)
 ;;     Fetch the data and pretty-print the raw parsed s-expression
 ;;     into a buffer, `*weathergov-raw*'.
 ;;
-;;   M-x weathergov-show
+;;   (weathergov-show)
 ;;     Fetch the data and show a human-readable report of current
 ;;     conditions and the text forecast, in a buffer,
 ;;     `*weathergov-show*'.
-;;
-;;   M-x weathergov-insert-current-dense
-;;     Fetch the data and insert a compact one-line ASCII summary of
-;;     current conditions at point, for logging into notes.
 
 ;;; Code:
 
@@ -385,7 +389,6 @@ DATA is as returned by `weathergov-fetch-data'."
       (weathergov--insert-hazards forecast)
       (weathergov--insert-forecast forecast))))
 
-;;;###autoload
 (defun weathergov-show (&optional url)
   "Fetch weather.gov data and show a human-readable report.
 
@@ -393,11 +396,8 @@ Calls `weathergov-fetch-data' and pops to a buffer named
 \"*weathergov-show*\" showing a report of current conditions and the
 text forecast, formatted with faces for readability.
 
-With a prefix argument, prompt for URL to fetch instead of using
-`weathergov-data-url'."
-  (interactive
-   (list (when current-prefix-arg
-           (read-string "Weather data URL: " weathergov-data-url))))
+URL defaults to `weathergov-data-url'.  This is a plain function, not
+a command; call it from Lisp."
   (let ((data (weathergov-fetch-data url))
         (buffer (get-buffer-create "*weathergov-show*")))
     (with-current-buffer buffer
@@ -411,7 +411,7 @@ With a prefix argument, prompt for URL to fetch instead of using
 (defvar weathergov--last-pressure-value nil
   "The most recently seen barometric pressure, as a number.
 Used by `weathergov--pressure-trend' to report a rise/fall trend from
-one call of `weathergov-insert-current-dense' to the next within the
+one call of `weathergov-insert' to the next within the
 same Emacs session.  There is no trend history before the first
 call, so nil here means \"unknown\".")
 
@@ -524,7 +524,7 @@ next forecast high and low."
     (mapconcat #'identity (nreverse chunks) " ")))
 
 ;;;###autoload
-(defun weathergov-insert-current-dense (&optional url)
+(defun weathergov-insert (&optional url)
   "Fetch weather.gov data and insert a compact one-line summary at point.
 
 The line is prefixed with \"weather.gov\", followed by the current
@@ -555,7 +555,6 @@ With a prefix argument, prompt for URL to fetch instead of using
       (error "weathergov: no current-observations data in response"))
     (insert (weathergov--dense-current-line current forecast))))
 
-;;;###autoload
 (defun weathergov-raw (&optional url)
   "Fetch weather.gov data and show the raw parsed s-expression.
 
@@ -563,11 +562,8 @@ Calls `weathergov-fetch-data' and pops to a buffer named
 \"*weathergov-raw*\" showing the returned s-expression,
 pretty-printed.
 
-With a prefix argument, prompt for URL to fetch instead of using
-`weathergov-data-url'."
-  (interactive
-   (list (when current-prefix-arg
-           (read-string "Weather data URL: " weathergov-data-url))))
+URL defaults to `weathergov-data-url'.  This is a plain function, not
+a command; call it from Lisp."
   (let ((data (weathergov-fetch-data url))
         (buffer (get-buffer-create "*weathergov-raw*")))
     (with-current-buffer buffer

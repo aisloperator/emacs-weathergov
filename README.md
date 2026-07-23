@@ -29,16 +29,9 @@ Put `weathergov.el` somewhere on your `load-path` and:
 
 ## Commands
 
-- `M-x weathergov-raw` — fetch the data and pretty-print the raw
-  parsed s-expression into a buffer, `*weathergov-raw*`.
-
-- `M-x weathergov-show` — fetch the data and show a human-readable
-  report of current conditions and the text forecast, with faces for
-  readability, in a buffer, `*weathergov-show*`.
-
-- `M-x weathergov-insert-current-dense` — fetch the data and insert a
-  compact one-line ASCII summary of current conditions at point, for
-  logging into notes, e.g.:
+- `M-x weathergov-insert` — fetch the data and insert a compact
+  one-line ASCII summary of current conditions at point, for logging
+  into notes, e.g.:
 
   ```
   weather.gov 79F feels 83F high 82F low 67F humidity 50% pressure (down)30.01in air-quality-alert
@@ -52,15 +45,26 @@ Put `weathergov.el` somewhere on your `load-path` and:
   against the last fetch in the session, since the DWML feed itself
   only gives a single reading) might not be the best way to do this.
 
-All three commands take a prefix argument (`C-u`) to prompt for a URL
-to fetch instead of using `weathergov-data-url`.
+  With a prefix argument (`C-u`), prompts for a URL to fetch instead
+  of using `weathergov-data-url`.
 
 ## Functions
 
 - `weathergov-fetch-data` — fetches and parses the data, returning
   the s-expression structure. Intentionally general-purpose, so
-  other functions and commands can extract whatever they need from
-  it.
+  other functions can extract whatever they need from it.
+
+- `weathergov-show` — fetches the data and pops to a buffer,
+  `*weathergov-show*`, showing a human-readable report of current
+  conditions and the text forecast, with faces for readability.
+
+- `weathergov-raw` — fetches the data and pops to a buffer,
+  `*weathergov-raw*`, showing the raw parsed s-expression,
+  pretty-printed.
+
+  `weathergov-show` and `weathergov-raw` are plain functions rather
+  than commands, to keep the `M-x` namespace to just
+  `weathergov-insert`; call them from Lisp, e.g. `M-: (weathergov-show)`.
 
 ## Provenance
 
