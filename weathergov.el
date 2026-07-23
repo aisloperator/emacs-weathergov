@@ -170,8 +170,14 @@ also sometimes leaves empty, as in <value xsi:nil=\"true\"></value>."
 
 (defun weathergov--values (node)
   "Return the list of <value> texts within NODE, in order.
-An empty/nil-flagged value becomes nil in the list."
-  (mapcar #'weathergov--text (xml-get-children node 'value)))
+An empty/nil-flagged value becomes nil in the list, as does
+weather.gov's own \"NA\" (not available) placeholder text, so that
+callers don't mistake it for a real reading (e.g. a calm/unmeasured
+wind speed rendered as literal text \"NA\")."
+  (mapcar (lambda (n)
+            (let ((v (weathergov--text n)))
+              (unless (equal v "NA") v)))
+          (xml-get-children node 'value)))
 
 (defun weathergov--unit-suffix (units)
   "Return a short display suffix for a weather.gov UNITS string, or nil."
@@ -290,10 +296,10 @@ CURRENT is a <data type=\"current observations\"> element."
       (weathergov--insert-label-value "Dew point:" (weathergov--format-value dewpoint)))
     (when humidity
       (weathergov--insert-label-value "Humidity:" (weathergov--format-value humidity "%")))
-    (when wind-speed
-      (let ((dir (and wind-dir (weathergov--compass-direction (car (weathergov--values wind-dir)))))
-            (spd (weathergov--format-value wind-speed))
-            (gust (and wind-gust (weathergov--format-value wind-gust))))
+    (let* ((dir (and wind-dir (weathergov--compass-direction (car (weathergov--values wind-dir)))))
+           (spd (and wind-speed (weathergov--format-value wind-speed)))
+           (gust (and wind-gust (weathergov--format-value wind-gust))))
+      (when spd
         (weathergov--insert-label-value
          "Wind:"
          (concat (and dir (concat dir " ")) spd (and gust (format ", gusting to %s" gust))))))
@@ -466,24 +472,27 @@ next forecast high and low."
   (let* ((cur-params (car (xml-get-children current 'parameters)))
          (actual (weathergov--find-temperature-untyped cur-params))
          (apparent (weathergov--find-parameter cur-params 'temperature "apparent"))
-         (main-temp (or actual apparent))
+         (actual-str (and actual (weathergov--format-value-compact actual)))
+         (apparent-str (and apparent (weathergov--format-value-compact apparent)))
+         (main-str (or actual-str apparent-str))
          (chunks nil))
     (push "weather.gov" chunks)
-    (when main-temp
-      (push (weathergov--format-value-compact main-temp) chunks))
-    (when (and actual apparent
-               (not (equal (car (weathergov--values actual))
-                           (car (weathergov--values apparent)))))
-      (push (concat "feels " (weathergov--format-value-compact apparent)) chunks))
+    (when main-str
+      (push main-str chunks))
+    (when (and actual-str apparent-str (not (equal actual-str apparent-str)))
+      (push (concat "feels " apparent-str) chunks))
     (when forecast
       (let* ((f-params (car (xml-get-children forecast 'parameters)))
              (high (weathergov--find-parameter f-params 'temperature "maximum"))
-             (low (weathergov--find-parameter f-params 'temperature "minimum")))
-        (when high (push (concat "high " (weathergov--format-value-compact high)) chunks))
-        (when low (push (concat "low " (weathergov--format-value-compact low)) chunks))))
-    (let ((humidity (weathergov--find-parameter cur-params 'humidity "relative")))
-      (when humidity
-        (push (concat "humidity " (weathergov--format-value-compact humidity "%")) chunks)))
+             (low (weathergov--find-parameter f-params 'temperature "minimum"))
+             (high-str (and high (weathergov--format-value-compact high)))
+             (low-str (and low (weathergov--format-value-compact low))))
+        (when high-str (push (concat "high " high-str) chunks))
+        (when low-str (push (concat "low " low-str) chunks))))
+    (let* ((humidity (weathergov--find-parameter cur-params 'humidity "relative"))
+           (humidity-str (and humidity (weathergov--format-value-compact humidity "%"))))
+      (when humidity-str
+        (push (concat "humidity " humidity-str) chunks)))
     (let* ((pressure (weathergov--find-parameter cur-params 'pressure "barometer"))
            (pv (and pressure (car (weathergov--values pressure)))))
       (when pv
@@ -492,15 +501,17 @@ next forecast high and low."
                         (weathergov--format-value-compact pressure))
                 chunks))))
     (let* ((wind-dir (weathergov--find-parameter cur-params 'direction "wind"))
-           (wind-speed (weathergov--find-parameter cur-params 'wind-speed "sustained")))
-      (when wind-speed
+           (wind-speed (weathergov--find-parameter cur-params 'wind-speed "sustained"))
+           (speed-str (and wind-speed (weathergov--format-value-compact wind-speed))))
+      (when speed-str
         (push (concat "wind "
                       (or (weathergov--compass-direction (car (weathergov--values wind-dir))) "")
-                      (weathergov--format-value-compact wind-speed))
+                      speed-str)
               chunks)))
-    (let ((dewpoint (weathergov--find-parameter cur-params 'temperature "dew point")))
-      (when dewpoint
-        (push (concat "dewpoint " (weathergov--format-value-compact dewpoint)) chunks)))
+    (let* ((dewpoint (weathergov--find-parameter cur-params 'temperature "dew point"))
+           (dewpoint-str (and dewpoint (weathergov--format-value-compact dewpoint))))
+      (when dewpoint-str
+        (push (concat "dewpoint " dewpoint-str) chunks)))
     (let* ((weather (weathergov--find-parameter cur-params 'weather))
            (summary (and weather (seq-find #'identity (weathergov--weather-summaries weather)))))
       (when summary
